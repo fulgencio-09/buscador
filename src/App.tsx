@@ -71,6 +71,10 @@ export default function App() {
     type: null
   });
 
+  // Ready ZIP notification and download error states
+  const [readyZip, setReadyZip] = useState<{ url: string; fileName: string; count: number } | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
   // Local Server Database Synchronization State
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
   const [activeDbRoute, setActiveDbRoute] = useState<string>('');
@@ -569,7 +573,12 @@ export default function App() {
   };
 
   const handleDownloadZip = async (preserveFolders: boolean) => {
-    const itemsToDownload = filteredItems.filter((i) => selectedIds.has(i.id));
+    setDownloadError(null);
+    let itemsToDownload = filteredItems.filter((i) => selectedIds.has(i.id));
+    if (itemsToDownload.length === 0 && filteredItems.length > 0) {
+      // If none selected, cap at safe batch of 300 to protect browser memory and responsiveness
+      itemsToDownload = filteredItems.slice(0, 300);
+    }
     if (itemsToDownload.length === 0) return;
 
     setDownloadProgress({
@@ -582,7 +591,7 @@ export default function App() {
     });
 
     try {
-      await downloadPdfsAsZip(itemsToDownload, {
+      const result = await downloadPdfsAsZip(itemsToDownload, {
         preserveFolderStructure: preserveFolders,
         zipFileName: `busqueda_pdfs_${filter.query ? filter.query.replace(/\s+/g, '_') : 'documentos'}.zip`,
         onProgress: (current, total, percentage, currentFileName) => {
@@ -596,8 +605,17 @@ export default function App() {
           });
         }
       });
-    } catch (err) {
+
+      if (result) {
+        setReadyZip({
+          url: result.url,
+          fileName: result.fileName,
+          count: result.totalItems
+        });
+      }
+    } catch (err: any) {
       console.error('Error al generar ZIP:', err);
+      setDownloadError(`No se pudo generar el archivo ZIP: ${err?.message || 'Error inesperado'}. Intenta seleccionando un número menor de archivos.`);
     } finally {
       setTimeout(() => {
         setDownloadProgress({
@@ -608,12 +626,15 @@ export default function App() {
           currentFileName: '',
           type: null
         });
-      }, 800);
+      }, 500);
     }
   };
 
   const handleDownloadOneByOne = async () => {
-    const itemsToDownload = filteredItems.filter((i) => selectedIds.has(i.id));
+    let itemsToDownload = filteredItems.filter((i) => selectedIds.has(i.id));
+    if (itemsToDownload.length === 0 && filteredItems.length > 0) {
+      itemsToDownload = filteredItems;
+    }
     if (itemsToDownload.length === 0) return;
 
     setDownloadProgress({
@@ -795,6 +816,10 @@ export default function App() {
               onDownloadZip={handleDownloadZip}
               onDownloadOneByOne={handleDownloadOneByOne}
               downloadProgress={downloadProgress}
+              readyZip={readyZip}
+              onDismissReadyZip={() => setReadyZip(null)}
+              downloadError={downloadError}
+              onDismissDownloadError={() => setDownloadError(null)}
             />
 
             {/* Results List */}

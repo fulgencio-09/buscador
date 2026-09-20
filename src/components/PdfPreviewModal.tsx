@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { X, Download, FileText, Folder, Calendar, HardDrive } from 'lucide-react';
 import { PdfItem } from '../types';
 import { formatFileSize, formatDate } from '../utils/folderScanner';
+import { getOrGeneratePdfBlob } from '../utils/pdfBlobHelper';
 
 interface PdfPreviewModalProps {
   item: PdfItem | null;
@@ -22,14 +23,12 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
       return;
     }
 
-    const data = item.file || item.blob;
-    if (data) {
-      const url = URL.createObjectURL(data);
-      setObjectUrl(url);
-      return () => {
-        URL.revokeObjectURL(url);
-      };
-    }
+    const data = getOrGeneratePdfBlob(item);
+    const url = URL.createObjectURL(data);
+    setObjectUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+    };
   }, [item]);
 
   if (!item) return null;

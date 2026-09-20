@@ -76,6 +76,7 @@ export const ResultsList: React.FC<ResultsListProps> = ({
   searchQuery
 }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(50);
 
@@ -295,12 +296,32 @@ export const ResultsList: React.FC<ResultsListProps> = ({
                 {/* Single Download Button */}
                 <button
                   type="button"
-                  onClick={() => onDownloadSingle(item)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDownloadingId(item.id);
+                    onDownloadSingle(item);
+                    setTimeout(() => {
+                      setDownloadingId(null);
+                    }, 1800);
+                  }}
                   title="Descargar este archivo individualmente"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-slate-900 hover:bg-slate-800 transition-colors shadow-xs"
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all shadow-xs ${
+                    downloadingId === item.id
+                      ? 'bg-emerald-600 text-white'
+                      : 'text-white bg-slate-900 hover:bg-slate-800'
+                  }`}
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Descargar</span>
+                  {downloadingId === item.id ? (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Descargando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Descargar</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>

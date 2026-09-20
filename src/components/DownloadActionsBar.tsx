@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Archive, Download, CheckSquare, Square, Loader2, FolderTree, Settings2 } from 'lucide-react';
+import { Archive, Download, CheckSquare, Square, Loader2, FolderTree, Settings2, CheckCircle2, AlertCircle, X } from 'lucide-react';
 import { DownloadProgress } from '../types';
 import { formatFileSize } from '../utils/folderScanner';
 
@@ -12,6 +12,10 @@ interface DownloadActionsBarProps {
   onDownloadZip: (preserveFolders: boolean) => void;
   onDownloadOneByOne: () => void;
   downloadProgress: DownloadProgress;
+  readyZip?: { url: string; fileName: string; count: number } | null;
+  onDismissReadyZip?: () => void;
+  downloadError?: string | null;
+  onDismissDownloadError?: () => void;
 }
 
 export const DownloadActionsBar: React.FC<DownloadActionsBarProps> = ({
@@ -22,7 +26,11 @@ export const DownloadActionsBar: React.FC<DownloadActionsBarProps> = ({
   onToggleSelectAll,
   onDownloadZip,
   onDownloadOneByOne,
-  downloadProgress
+  downloadProgress,
+  readyZip,
+  onDismissReadyZip,
+  downloadError,
+  onDismissDownloadError
 }) => {
   const [preserveFolders, setPreserveFolders] = useState(true);
   const [showZipSettings, setShowZipSettings] = useState(false);
@@ -120,7 +128,7 @@ export const DownloadActionsBar: React.FC<DownloadActionsBarProps> = ({
           {/* Download One by One button */}
           <button
             type="button"
-            disabled={selectedCount === 0 || downloadProgress.isDownloading}
+            disabled={totalResults === 0 || downloadProgress.isDownloading}
             onClick={onDownloadOneByOne}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xs"
           >
@@ -129,13 +137,17 @@ export const DownloadActionsBar: React.FC<DownloadActionsBarProps> = ({
             ) : (
               <Download className="w-4 h-4 text-slate-600" />
             )}
-            <span>Descargar uno en uno ({selectedCount})</span>
+            <span>
+              {selectedCount === 0
+                ? `Descargar todos (${totalResults})`
+                : `Descargar uno en uno (${selectedCount})`}
+            </span>
           </button>
 
           {/* Download ZIP button */}
           <button
             type="button"
-            disabled={selectedCount === 0 || downloadProgress.isDownloading}
+            disabled={totalResults === 0 || downloadProgress.isDownloading}
             onClick={() => onDownloadZip(preserveFolders)}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm shadow-red-200"
           >
@@ -144,7 +156,11 @@ export const DownloadActionsBar: React.FC<DownloadActionsBarProps> = ({
             ) : (
               <Archive className="w-4 h-4 text-white" />
             )}
-            <span>Descargar en ZIP ({selectedCount})</span>
+            <span>
+              {selectedCount === 0
+                ? `Descargar todos en ZIP (${totalResults})`
+                : `Descargar en ZIP (${selectedCount})`}
+            </span>
           </button>
         </div>
       </div>
@@ -167,6 +183,66 @@ export const DownloadActionsBar: React.FC<DownloadActionsBarProps> = ({
               className="h-full bg-red-600 transition-all duration-200 ease-out"
               style={{ width: `${downloadProgress.percentage}%` }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Ready ZIP Notification Banner with Direct Native Link */}
+      {readyZip && (
+        <div className="mt-3 pt-3 border-t border-emerald-100">
+          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5 text-emerald-950">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div>
+                <div className="font-bold">
+                  ¡Archivo ZIP generado con éxito! ({readyZip.count} documentos incluidos)
+                </div>
+                <div className="text-emerald-700 text-[11px]">
+                  Si tu navegador no inició la descarga automáticamente, haz clic en el botón:
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <a
+                href={readyZip.url}
+                download={readyZip.fileName}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm transition-all cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Guardar {readyZip.fileName}</span>
+              </a>
+              {onDismissReadyZip && (
+                <button
+                  type="button"
+                  onClick={onDismissReadyZip}
+                  className="text-emerald-700 hover:text-emerald-900 p-1.5 rounded-lg hover:bg-emerald-100 transition-colors"
+                  title="Cerrar notificación"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Download Error Banner */}
+      {downloadError && (
+        <div className="mt-3 pt-3 border-t border-red-100">
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between gap-2 text-xs text-red-800">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+              <span>{downloadError}</span>
+            </div>
+            {onDismissDownloadError && (
+              <button
+                type="button"
+                onClick={onDismissDownloadError}
+                className="text-red-600 hover:text-red-800 p-1 rounded-md hover:bg-red-100 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       )}

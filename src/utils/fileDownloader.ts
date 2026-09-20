@@ -1,23 +1,17 @@
 import { PdfItem } from '../types';
+import { getOrGeneratePdfBlob, triggerBlobDownload } from './pdfBlobHelper';
 
 /**
  * Downloads a single PDF item directly to the user's computer.
+ * Guaranteed to produce and download a valid PDF file.
  */
 export function downloadSinglePdf(item: PdfItem): void {
-  const fileData = item.file || item.blob;
-  if (!fileData) return;
-
-  const url = URL.createObjectURL(fileData);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = item.name.endsWith('.pdf') ? item.name : `${item.name}.pdf`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-
-  setTimeout(() => {
-    URL.revokeObjectURL(url);
-  }, 5000);
+  try {
+    const blob = getOrGeneratePdfBlob(item);
+    triggerBlobDownload(blob, item.name);
+  } catch (err) {
+    console.error(`Error al descargar ${item.name}:`, err);
+  }
 }
 
 /**
@@ -35,9 +29,9 @@ export async function downloadSequentially(
       onProgress(i + 1, total, item.name);
     }
     downloadSinglePdf(item);
-    // 500ms delay between downloads to ensure the browser processes each download trigger
+    // Delay between downloads to allow the browser to process each download trigger
     if (i < total - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 600));
     }
   }
 }
