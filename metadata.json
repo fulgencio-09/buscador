@@ -1,0 +1,6 @@
+{
+  "name": "Buscador de PDFs en Carpetas",
+  "description": "Consulta y busca archivos PDF por nombre o coincidencia en rutas y subcarpetas con persistencia en LocalStorage, protección con contraseña y descargas en ZIP.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
