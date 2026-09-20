@@ -1,17 +1,17 @@
 import React, { useRef } from 'react';
-import { FolderOpen, Server, UploadCloud, PlusCircle, CheckCircle2, AlertCircle, Lock, Zap, Gauge } from 'lucide-react';
+import { FolderOpen, UploadCloud, AlertCircle, Lock, Zap } from 'lucide-react';
 import { parseLocalFolderFiles } from '../utils/folderScanner';
 import { PdfItem } from '../types';
 
 interface SourceSelectorProps {
   currentSource: 'repository' | 'local';
-  onSelectSource: (source: 'repository' | 'local') => void;
+  onSelectSource?: (source: 'repository' | 'local') => void;
   onLocalFilesLoaded: (items: PdfItem[], rootFolderName: string) => void;
   onStartProcessFiles?: (files: FileList | File[]) => void;
   onSimulateLargeVolume?: (count?: number) => void;
   localFolderName: string | null;
   localPdfCount: number;
-  onOpenAddModal: () => void;
+  onOpenAddModal?: () => void;
   isRouteUnlocked?: boolean;
   onRequestUnlockRoute?: (actionDescription?: string, onAuthorized?: () => void) => void;
   isSavedInStorage?: boolean;
@@ -19,14 +19,11 @@ interface SourceSelectorProps {
 }
 
 export const SourceSelector: React.FC<SourceSelectorProps> = ({
-  currentSource,
-  onSelectSource,
   onLocalFilesLoaded,
   onStartProcessFiles,
   onSimulateLargeVolume,
   localFolderName,
   localPdfCount,
-  onOpenAddModal,
   isRouteUnlocked = true,
   onRequestUnlockRoute,
   isSavedInStorage,
@@ -56,7 +53,6 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
 
   const handleFolderButtonClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onSelectSource('local');
 
     if (!isRouteUnlocked && onRequestUnlockRoute) {
       onRequestUnlockRoute('cambiar la carpeta local protegida', () => {
@@ -73,166 +69,123 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
-            Origen de Datos / Directorio Raíz
+            Directorio de Trabajo / Carpeta Local
           </h2>
           <p className="text-xs text-slate-600 mt-0.5">
-            Selecciona si deseas buscar en el repositorio documental estructurado o escanear una carpeta de tu ordenador.
+            Escanea cualquier carpeta o ruta de tu dispositivo para consultar recursivamente todos sus documentos PDF.
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
           {onSimulateLargeVolume && (
-            <button
-              type="button"
-              onClick={() => onSimulateLargeVolume(3500)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors shadow-2xs"
-              title="Procesar e indexar un lote de 3,500 PDFs corporativos para probar el sistema de progreso en grandes volúmenes"
-            >
-              <Zap className="w-3.5 h-3.5 text-blue-600" />
-              <span>Probar Gran Volumen (3,500 PDFs)</span>
-            </button>
-          )}
-
-          {currentSource === 'repository' && (
-            <button
-              type="button"
-              onClick={onOpenAddModal}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors self-start sm:self-auto"
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>Agregar PDF o Carpeta</span>
-            </button>
+            <div className="inline-flex items-center rounded-lg border border-blue-200 bg-blue-50/80 p-0.5 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => onSimulateLargeVolume(5000)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md text-blue-900 bg-blue-100 hover:bg-blue-200 transition-colors"
+                title="Procesar e indexar 5,000 PDFs para verificar el rendimiento fluido sin bloqueos"
+              >
+                <Zap className="w-3.5 h-3.5 text-blue-600" />
+                <span>Probar 5,000 PDFs</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onSimulateLargeVolume(3500)}
+                className="px-2 py-1.5 text-[11px] font-medium text-blue-700 hover:text-blue-900 transition-colors"
+                title="Probar lote de 3,500 PDFs"
+              >
+                3,500
+              </button>
+            </div>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-        {/* Option 1: Structured Repository */}
-        <div
-          onClick={() => onSelectSource('repository')}
-          className={`cursor-pointer rounded-lg p-3.5 border transition-all flex items-start gap-3 ${
-            currentSource === 'repository'
-              ? 'border-red-600 bg-red-50/40 ring-2 ring-red-500/20'
-              : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300'
-          }`}
-        >
-          <div
-            className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-              currentSource === 'repository'
-                ? 'bg-red-600 text-white'
-                : 'bg-slate-200 text-slate-600'
-            }`}
-          >
-            <Server className="w-5 h-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-slate-900">
-                Repositorio de Rutas y Carpetas
-              </span>
-              {currentSource === 'repository' && (
-                <CheckCircle2 className="w-4 h-4 text-red-600 shrink-0" />
-              )}
+      <div className="mt-3">
+        {/* Local Computer Folder Panel */}
+        <div className="rounded-lg p-3.5 sm:p-4 border border-slate-200 bg-slate-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-red-600 text-white shadow-xs">
+              <FolderOpen className="w-5 h-5" />
             </div>
-            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-              Explora carpetas organizadas por departamentos (<code className="text-red-700 bg-red-100/50 px-1 py-0.5 rounded">finanzas/</code>, <code className="text-red-700 bg-red-100/50 px-1 py-0.5 rounded">legal/</code>, <code className="text-red-700 bg-red-100/50 px-1 py-0.5 rounded">recursos_humanos/</code>).
-            </p>
-          </div>
-        </div>
-
-        {/* Option 2: Local Computer Folder */}
-        <div
-          onClick={() => onSelectSource('local')}
-          className={`cursor-pointer rounded-lg p-3.5 border transition-all flex items-start gap-3 ${
-            currentSource === 'local'
-              ? 'border-red-600 bg-red-50/40 ring-2 ring-red-500/20'
-              : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300'
-          }`}
-        >
-          <div
-            className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-              currentSource === 'local'
-                ? 'bg-red-600 text-white'
-                : 'bg-slate-200 text-slate-600'
-            }`}
-          >
-            <FolderOpen className="w-5 h-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-slate-900">
-                Carpeta Local de tu Dispositivo
-              </span>
-              {currentSource === 'local' && (
-                <CheckCircle2 className="w-4 h-4 text-red-600 shrink-0" />
-              )}
-            </div>
-            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-              Selecciona cualquier carpeta de tu disco duro para consultar recursivamente todos sus subdirectorios.
-            </p>
-
-            {/* Folder Picker trigger with Password / Lock Protection */}
-            <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              <input
-                ref={folderInputRef}
-                type="file"
-                // @ts-expect-error - webkitdirectory is standard in all modern browsers
-                webkitdirectory=""
-                directory=""
-                multiple
-                onChange={handleFolderChange}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={handleFolderButtonClick}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border shadow-xs transition-colors ${
-                  !isRouteUnlocked
-                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
-                    : 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300'
-                }`}
-                title={!isRouteUnlocked ? 'Requiere contraseña para cambiar la carpeta local' : 'Cambiar carpeta local'}
-              >
-                {!isRouteUnlocked ? (
-                  <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                ) : (
-                  <UploadCloud className="w-3.5 h-3.5 text-red-600 shrink-0" />
-                )}
-                <span>{localFolderName ? 'Cambiar carpeta local' : 'Seleccionar carpeta local'}</span>
-                {!isRouteUnlocked && (
-                  <span className="text-[10px] bg-amber-200/80 text-amber-900 px-1.5 py-0.5 rounded font-mono font-bold">
-                    PIN
-                  </span>
-                )}
-              </button>
-
-              {localFolderName && (
-                <div className="flex items-center gap-1.5 text-xs text-slate-700 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-md">
-                  <span className="font-semibold text-slate-900 font-mono truncate max-w-[200px]" title={localFolderName}>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-bold text-slate-900">
+                  Carpeta Local de tu Dispositivo
+                </span>
+                {localFolderName && (
+                  <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
                     {localFolderName}
                   </span>
-                  <span className="text-slate-400">|</span>
-                  <span className="text-slate-600 font-medium">{localPdfCount} PDFs</span>
-                  {isSavedInStorage && (
-                    <span
-                      title={`Guardada en LocalStorage${savedStorageDate ? ` (${new Date(savedStorageDate).toLocaleDateString()})` : ''}`}
-                      className="ml-1 inline-flex items-center gap-0.5 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-semibold"
-                    >
-                      LocalStorage Guardado
-                    </span>
-                  )}
-                </div>
-              )}
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                Selecciona la carpeta raíz o arrastra cualquier directorio para consultar y filtrar al instante.
+              </p>
             </div>
+          </div>
 
-            {currentSource === 'local' && !localFolderName && (
-              <div className="mt-2 flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                <span>Haz clic en &quot;Seleccionar carpeta local&quot; para escanear tus archivos.</span>
+          {/* Folder Picker trigger with Password / Lock Protection */}
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            <input
+              ref={folderInputRef}
+              type="file"
+              // @ts-expect-error - webkitdirectory is standard in all modern browsers
+              webkitdirectory=""
+              directory=""
+              multiple
+              onChange={handleFolderChange}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={handleFolderButtonClick}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg border shadow-xs transition-colors ${
+                !isRouteUnlocked
+                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
+                  : 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300'
+              }`}
+              title={!isRouteUnlocked ? 'Requiere contraseña para cambiar la carpeta local' : 'Cambiar carpeta local'}
+            >
+              {!isRouteUnlocked ? (
+                <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              ) : (
+                <UploadCloud className="w-3.5 h-3.5 text-red-600 shrink-0" />
+              )}
+              <span>{localFolderName ? 'Cambiar carpeta local' : 'Seleccionar carpeta local'}</span>
+              {!isRouteUnlocked && (
+                <span className="text-[10px] bg-amber-200/80 text-amber-900 px-1.5 py-0.5 rounded font-mono font-bold">
+                  PIN
+                </span>
+              )}
+            </button>
+
+            {localFolderName && (
+              <div className="flex items-center gap-1.5 text-xs text-slate-700 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-2xs">
+                <span className="font-semibold text-slate-900 font-mono truncate max-w-[180px]" title={localFolderName}>
+                  {localFolderName}
+                </span>
+                <span className="text-slate-300">|</span>
+                <span className="text-slate-700 font-semibold">{localPdfCount.toLocaleString()} PDFs</span>
+                {isSavedInStorage && (
+                  <span
+                    title={`Guardada en LocalStorage / IndexedDB${savedStorageDate ? ` (${new Date(savedStorageDate).toLocaleDateString()})` : ''}`}
+                    className="ml-1 inline-flex items-center gap-0.5 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-semibold"
+                  >
+                    Guardado
+                  </span>
+                )}
               </div>
             )}
           </div>
         </div>
+
+        {!localFolderName && (
+          <div className="mt-2.5 flex items-center gap-2 text-xs text-amber-800 bg-amber-50/80 border border-amber-200 px-3 py-2 rounded-lg">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>Haz clic en <strong>&quot;Seleccionar carpeta local&quot;</strong> o arrastra cualquier carpeta aquí para consultar tus archivos PDF.</span>
+          </div>
+        )}
       </div>
     </div>
   );

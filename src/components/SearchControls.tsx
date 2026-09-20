@@ -1,5 +1,5 @@
-import React from 'react';
-import { Search, FolderGit2, X, SlidersHorizontal, ArrowDownAZ, Lock, Unlock, Cpu, Play } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, FolderGit2, X, SlidersHorizontal, ArrowDownAZ, Lock, Unlock, Cpu } from 'lucide-react';
 import { SearchFilter, MatchMode } from '../types';
 
 interface SearchControlsProps {
@@ -25,6 +25,66 @@ export const SearchControls: React.FC<SearchControlsProps> = ({
   onLockRoute,
   onProcessRoute
 }) => {
+  // Local state for smooth, un-throttled typing with debounced propagation
+  const [localQuery, setLocalQuery] = useState(filter.query);
+  const [localPath, setLocalPath] = useState(filter.pathPrefix);
+
+  const queryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pathTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Synchronize when external filter resets or changes from other components
+  useEffect(() => {
+    setLocalQuery(filter.query);
+  }, [filter.query]);
+
+  useEffect(() => {
+    setLocalPath(filter.pathPrefix);
+  }, [filter.pathPrefix]);
+
+  const handleQueryChange = (val: string) => {
+    setLocalQuery(val);
+    if (queryTimerRef.current) clearTimeout(queryTimerRef.current);
+    queryTimerRef.current = setTimeout(() => {
+      onFilterChange({ query: val });
+    }, 200);
+  };
+
+  const handleClearQuery = () => {
+    if (queryTimerRef.current) clearTimeout(queryTimerRef.current);
+    setLocalQuery('');
+    onFilterChange({ query: '' });
+  };
+
+  const handlePathChange = (val: string) => {
+    if (!isRouteUnlocked) return;
+    setLocalPath(val);
+    if (pathTimerRef.current) clearTimeout(pathTimerRef.current);
+    pathTimerRef.current = setTimeout(() => {
+      onFilterChange({ pathPrefix: val });
+    }, 250);
+  };
+
+  const handleClearPath = () => {
+    if (!isRouteUnlocked) return;
+    if (pathTimerRef.current) clearTimeout(pathTimerRef.current);
+    setLocalPath('');
+    onFilterChange({ pathPrefix: '' });
+  };
+
+  const handleExecuteRoute = () => {
+    if (pathTimerRef.current) clearTimeout(pathTimerRef.current);
+    onFilterChange({ pathPrefix: localPath });
+    if (onProcessRoute) {
+      onProcessRoute(localPath || '');
+    }
+  };
+
+  // Limit datalist options to top 40 to avoid native browser autocomplete locking on large sets
+  const safeDatalistFolders = React.useMemo(() => {
+    if (availableFolders.length <= 40) return availableFolders;
+    return availableFolders.slice(0, 40);
+  }, [availableFolders]);
+
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-100">
@@ -34,10 +94,16 @@ export const SearchControls: React.FC<SearchControlsProps> = ({
             Criterios de Búsqueda y Rutas
           </h2>
         </div>
-        {(filter.query || filter.pathPrefix) && (
+        {(localQuery || localPath) && (
           <button
             type="button"
-            onClick={onResetFilter}
+            onClick={() => {
+              if (queryTimerRef.current) clearTimeout(queryTimerRef.current);
+              if (pathTimerRef.current) clearTimeout(pathTimerRef.current);
+              setLocalQuery('');
+              if (isRouteUnlocked) setLocalPath('');
+              onResetFilter();
+            }}
             className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 transition-colors"
           >
             <X className="w-3.5 h-3.5" />
@@ -47,7 +113,7 @@ export const SearchControls: React.FC<SearchControlsProps> = ({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-        {/* Field 1: PDF Name or partial name (starts blank) */}
+        {/* Field 1: PDF Name or partial name */}
         <div className="md:col-span-6 space-y-1.5">
           <label htmlFor="search-query-input" className="block text-xs font-medium text-slate-700">
             Nombre o parte del nombre del PDF
@@ -59,15 +125,21 @@ export const SearchControls: React.FC<SearchControlsProps> = ({
             <input
               id="search-query-input"
               type="text"
-              value={filter.query}
-              onChange={(e) => onFilterChange({ query: e.target.value })}
+              value={localQuery}
+              onChange={(e) => handleQueryChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  if (queryTimerRef.current) clearTimeout(queryTimerRef.current);
+                  onFilterChange({ query: localQuery });
+                }
+              }}
               placeholder=""
               className="w-full pl-9 pr-8 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 focus:bg-white transition-all text-slate-900 placeholder:text-slate-400"
             />
-            {filter.query && (
+            {localQuery && (
               <button
                 type="button"
-                onClick={() => onFilterChange({ query: '' })}
+                onClick={handleClearQuery}
                 className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600"
               >
                 <X className="w-4 h-4" />
@@ -118,22 +190,18 @@ export const SearchControls: React.FC<SearchControlsProps> = ({
               id="search-path-input"
               type="text"
               list={isRouteUnlocked ? 'folder-datalist' : undefined}
-              value={filter.pathPrefix}
+              value={localPath}
               readOnly={!isRouteUnlocked}
               onClick={() => {
                 if (!isRouteUnlocked) {
                   onRequestUnlockRoute('modificar la ruta de búsqueda');
                 }
               }}
-              onChange={(e) => {
-                if (isRouteUnlocked) {
-                  onFilterChange({ pathPrefix: e.target.value });
-                }
-              }}
+              onChange={(e) => handlePathChange(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && onProcessRoute) {
+                if (e.key === 'Enter') {
                   e.preventDefault();
-                  onProcessRoute(filter.pathPrefix || '');
+                  handleExecuteRoute();
                 }
               }}
               placeholder={isRouteUnlocked ? 'Escribe o selecciona una ruta...' : 'Ruta protegida (clic para desbloquear con código)'}
@@ -144,10 +212,10 @@ export const SearchControls: React.FC<SearchControlsProps> = ({
               }`}
             />
             {isRouteUnlocked ? (
-              filter.pathPrefix && (
+              localPath && (
                 <button
                   type="button"
-                  onClick={() => onFilterChange({ pathPrefix: '' })}
+                  onClick={handleClearPath}
                   className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600"
                 >
                   <X className="w-4 h-4" />
@@ -165,7 +233,7 @@ export const SearchControls: React.FC<SearchControlsProps> = ({
             )}
             {isRouteUnlocked && (
               <datalist id="folder-datalist">
-                {availableFolders.map((f) => (
+                {safeDatalistFolders.map((f) => (
                   <option key={f} value={f} />
                 ))}
               </datalist>
@@ -180,7 +248,7 @@ export const SearchControls: React.FC<SearchControlsProps> = ({
             {onProcessRoute && (
               <button
                 type="button"
-                onClick={() => onProcessRoute(filter.pathPrefix || '')}
+                onClick={handleExecuteRoute}
                 className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md bg-slate-900 hover:bg-slate-800 text-white shadow-xs transition-colors shrink-0"
                 title="Procesar e indexar la información contenida en esta ruta con barra de progreso y porcentaje"
               >
@@ -249,7 +317,7 @@ export const SearchControls: React.FC<SearchControlsProps> = ({
           </label>
 
           <div className="text-slate-500 font-medium ml-auto lg:ml-0">
-            Resultados: <span className="font-bold text-slate-900">{totalResults}</span>
+            Resultados: <span className="font-bold text-slate-900">{totalResults.toLocaleString()}</span>
           </div>
         </div>
       </div>

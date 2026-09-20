@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Folder, FolderOpen, ChevronDown, ChevronRight, Compass, Lock } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Folder, FolderOpen, ChevronDown, ChevronRight, Compass, FolderTree } from 'lucide-react';
 import { PdfItem } from '../types';
 
 interface DirectoryExplorerProps {
@@ -15,7 +15,6 @@ interface TreeNode {
   name: string;
   fullPath: string;
   children: Map<string, TreeNode>;
-  matchingCount: number;
   totalCount: number;
 }
 
@@ -28,6 +27,7 @@ export const DirectoryExplorer: React.FC<DirectoryExplorerProps> = ({
   onSelectPath
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
+  const [openedFolders, setOpenedFolders] = useState<Set<string>>(() => new Set());
 
   const handleSelectWithAuth = (targetPath: string) => {
     if (!isRouteUnlocked && onRequestUnlockRoute) {
@@ -40,65 +40,97 @@ export const DirectoryExplorer: React.FC<DirectoryExplorerProps> = ({
     }
   };
 
-  // Build folder hierarchy tree
-  const rootTree: TreeNode = {
-    name: 'Raíz',
-    fullPath: '',
-    children: new Map(),
-    matchingCount: filteredItems.length,
-    totalCount: allItems.length
+  const toggleFolderOpen = (e: React.MouseEvent, path: string) => {
+    e.stopPropagation();
+    setOpenedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
   };
 
-  const matchingSet = new Set(filteredItems.map((i) => i.id));
+  // Build folder hierarchy tree only when allItems changes (memoized for high volume)
+  const rootTree = useMemo<TreeNode>(() => {
+    const root: TreeNode = {
+      name: 'Raíz',
+      fullPath: '',
+      children: new Map(),
+      totalCount: allItems.length
+    };
 
-  // Populate total items
-  for (const item of allItems) {
-    const segments = item.folder.split('/').filter(Boolean);
-    let currentNode = rootTree;
-    let accumulatedPath = '';
+    for (let i = 0; i < allItems.length; i++) {
+      const item = allItems[i];
+      const segments = item.folder.split('/').filter(Boolean);
+      let currentNode = root;
+      let accumulatedPath = '';
 
-    for (const seg of segments) {
-      accumulatedPath = accumulatedPath ? `${accumulatedPath}/${seg}` : seg;
-      if (!currentNode.children.has(seg)) {
-        currentNode.children.set(seg, {
-          name: seg,
-          fullPath: accumulatedPath,
-          children: new Map(),
-          matchingCount: 0,
-          totalCount: 0
-        });
+      for (const seg of segments) {
+        accumulatedPath = accumulatedPath ? `${accumulatedPath}/${seg}` : seg;
+        let child = currentNode.children.get(seg);
+        if (!child) {
+          child = {
+            name: seg,
+            fullPath: accumulatedPath,
+            children: new Map(),
+            totalCount: 0
+          };
+          currentNode.children.set(seg, child);
+        }
+        child.totalCount += 1;
+        currentNode = child;
       }
-      const child = currentNode.children.get(seg)!;
-      child.totalCount += 1;
-      if (matchingSet.has(item.id)) {
-        child.matchingCount += 1;
-      }
-      currentNode = child;
     }
-  }
 
-  // Recursive folder tree item renderer
+    return root;
+  }, [allItems]);
+
+  // Recursive folder tree item renderer with depth control and collapsible nodes
   const renderTreeNodes = (node: TreeNode, depth = 0): React.ReactNode => {
     const childrenArray = Array.from(node.children.values());
     if (childrenArray.length === 0) return null;
 
+    // Cap excessive folder nodes rendering to maintain 60fps
+    const displayList = childrenArray.slice(0, 100);
+
     return (
-      <div className={`space-y-1 ${depth > 0 ? 'ml-3 border-l border-slate-200 pl-2' : ''}`}>
-        {childrenArray.map((child) => {
+      <div className={`space-y-1 ${depth > 0 ? 'ml-2.5 border-l border-slate-200 pl-2' : ''}`}>
+        {displayList.map((child) => {
           const isSelected = currentPathPrefix.toLowerCase() === child.fullPath.toLowerCase();
+          const hasChildren = child.children.size > 0;
+          const isNodeOpen = openedFolders.has(child.fullPath) || (depth === 0 && childrenArray.length <= 12);
 
           return (
             <div key={child.fullPath}>
               <div
                 onClick={() => handleSelectWithAuth(isSelected ? '' : child.fullPath)}
-                className={`flex items-center justify-between py-1 px-2 rounded-md cursor-pointer text-xs transition-colors ${
+                className={`flex items-center justify-between py-1 px-2 rounded-md cursor-pointer text-xs transition-colors group ${
                   isSelected
                     ? 'bg-red-50 text-red-700 font-semibold border border-red-200'
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
                 <div className="flex items-center gap-1.5 min-w-0">
-                  {child.children.size > 0 ? (
+                  {hasChildren ? (
+                    <button
+                      type="button"
+                      onClick={(e) => toggleFolderOpen(e, child.fullPath)}
+                      className="p-0.5 -ml-1 text-slate-400 hover:text-slate-600 rounded transition-colors"
+                    >
+                      {isNodeOpen ? (
+                        <ChevronDown className="w-3 h-3" />
+                      ) : (
+                        <ChevronRight className="w-3 h-3" />
+                      )}
+                    </button>
+                  ) : (
+                    <span className="w-3" />
+                  )}
+
+                  {isNodeOpen ? (
                     <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                   ) : (
                     <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" />
@@ -107,19 +139,13 @@ export const DirectoryExplorer: React.FC<DirectoryExplorerProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0 text-[11px]">
-                  {child.matchingCount > 0 ? (
-                    <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-bold">
-                      {child.matchingCount}
-                    </span>
-                  ) : (
-                    <span className="text-slate-400">0</span>
-                  )}
-                  <span className="text-slate-300">/</span>
-                  <span className="text-slate-400">{child.totalCount}</span>
+                  <span className="px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-700 font-medium">
+                    {child.totalCount.toLocaleString()}
+                  </span>
                 </div>
               </div>
 
-              {renderTreeNodes(child, depth + 1)}
+              {hasChildren && isNodeOpen && renderTreeNodes(child, depth + 1)}
             </div>
           );
         })}
@@ -160,11 +186,11 @@ export const DirectoryExplorer: React.FC<DirectoryExplorerProps> = ({
             }`}
           >
             <div className="flex items-center gap-1.5">
-              <FolderOpen className="w-3.5 h-3.5 text-slate-500" />
+              <FolderTree className="w-3.5 h-3.5 text-slate-500" />
               <span>(Todos los directorios)</span>
             </div>
             <span className="px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-700 font-semibold text-[11px]">
-              {filteredItems.length} de {allItems.length}
+              {filteredItems.length.toLocaleString()} de {allItems.length.toLocaleString()}
             </span>
           </div>
 

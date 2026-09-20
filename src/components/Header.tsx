@@ -93,12 +93,8 @@ export const Header: React.FC<HeaderProps> = ({
             )}
 
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 font-medium">
-              {currentSource === 'local' ? (
-                <HardDrive className="w-3.5 h-3.5 text-blue-600" />
-              ) : (
-                <FolderTree className="w-3.5 h-3.5 text-amber-600" />
-              )}
-              <span>{currentSource === 'local' ? 'Carpeta Local' : 'Repositorio'}</span>
+              <HardDrive className="w-3.5 h-3.5 text-blue-600" />
+              <span>Carpeta Local</span>
               <span className="text-slate-400">|</span>
               <span className="text-slate-600 font-mono max-w-[140px] truncate" title={currentPath}>
                 {currentPath || '/'}

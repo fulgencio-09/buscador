@@ -34,7 +34,7 @@ export default function App() {
   // State for items
   const [repositoryItems, setRepositoryItems] = useState<PdfItem[]>(() => getInitialRepositoryItems());
   const [localItems, setLocalItems] = useState<PdfItem[]>([]);
-  const [currentSource, setCurrentSource] = useState<'repository' | 'local'>('repository');
+  const [currentSource, setCurrentSource] = useState<'repository' | 'local'>('local');
   const [localFolderName, setLocalFolderName] = useState<string | null>(null);
 
   // Large Volume Processing and Real-Time Progress State
@@ -227,10 +227,10 @@ export default function App() {
     }
   };
 
-  // Active items based on current source
+  // Active items from local folder
   const activeItems = useMemo(() => {
-    return currentSource === 'repository' ? repositoryItems : localItems;
-  }, [currentSource, repositoryItems, localItems]);
+    return localItems;
+  }, [localItems]);
 
   // Filtered items based on search query, path, and options
   const filteredItems = useMemo(() => {
@@ -246,19 +246,43 @@ export default function App() {
     return Array.from(folders).sort();
   }, [activeItems]);
 
-  // Synchronize selection: when results change, automatically select all matching items by default
+  // Synchronize selection: when results change, select items without choking the UI
   useEffect(() => {
-    const newSelected = new Set<string>();
-    for (const item of filteredItems) {
-      newSelected.add(item.id);
+    const total = filteredItems.length;
+    if (total === 0) {
+      setSelectedIds(new Set());
+      return;
     }
-    setSelectedIds(newSelected);
+    // If list is small (<= 100 items), select all by default
+    if (total <= 100) {
+      const newSelected = new Set<string>();
+      for (let i = 0; i < total; i++) {
+        newSelected.add(filteredItems[i].id);
+      }
+      setSelectedIds(newSelected);
+    } else {
+      // For large volumes (> 100 items), select the first 50 items (page 1) to keep the app ultra-responsive
+      const newSelected = new Set<string>();
+      const limit = Math.min(total, 50);
+      for (let i = 0; i < limit; i++) {
+        newSelected.add(filteredItems[i].id);
+      }
+      setSelectedIds(newSelected);
+    }
   }, [filteredItems]);
 
-  // Total size of currently selected files
+  // Total size of currently selected files (fast pass)
   const selectedTotalSize = useMemo(() => {
+    if (selectedIds.size === 0) return 0;
     let sum = 0;
-    for (const item of filteredItems) {
+    if (selectedIds.size === filteredItems.length) {
+      for (let i = 0; i < filteredItems.length; i++) {
+        sum += filteredItems[i].size;
+      }
+      return sum;
+    }
+    for (let i = 0; i < filteredItems.length; i++) {
+      const item = filteredItems[i];
       if (selectedIds.has(item.id)) {
         sum += item.size;
       }
@@ -281,11 +305,31 @@ export default function App() {
     });
   };
 
+  const handleSelectMany = (ids: string[], select: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (select) {
+        for (let i = 0; i < ids.length; i++) {
+          next.add(ids[i]);
+        }
+      } else {
+        for (let i = 0; i < ids.length; i++) {
+          next.delete(ids[i]);
+        }
+      }
+      return next;
+    });
+  };
+
   const handleToggleSelectAll = () => {
     if (allSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filteredItems.map((i) => i.id)));
+      const newSelected = new Set<string>();
+      for (let i = 0; i < filteredItems.length; i++) {
+        newSelected.add(filteredItems[i].id);
+      }
+      setSelectedIds(newSelected);
     }
   };
 
@@ -671,7 +715,7 @@ export default function App() {
         totalFiles={activeItems.length}
         matchedFiles={filteredItems.length}
         currentSource={currentSource}
-        currentPath={filter.pathPrefix || (currentSource === 'local' ? (localFolderName || 'Raíz') : 'documentos/')}
+        currentPath={filter.pathPrefix || (localFolderName || 'Raíz')}
         databaseStatus={databaseStatus}
         isSavedInStorage={isSavedInStorage}
         isRouteUnlocked={isRouteUnlocked}
@@ -758,6 +802,7 @@ export default function App() {
               items={filteredItems}
               selectedIds={selectedIds}
               onToggleSelect={handleToggleSelect}
+              onSelectMany={handleSelectMany}
               onDownloadSingle={handleDownloadSingle}
               onPreview={(item) => setPreviewItem(item)}
               searchQuery={filter.query}
