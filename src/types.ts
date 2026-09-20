@@ -37,6 +37,19 @@ export interface DownloadProgress {
   type: 'zip' | 'individual' | null;
 }
 
+export interface ProcessingProgress {
+  isProcessing: boolean;
+  stage: 'idle' | 'scanning' | 'indexing' | 'persisting' | 'completed';
+  stageLabel: string;
+  totalFiles: number;
+  processedFiles: number;
+  pdfCount: number;
+  percentage: number;
+  currentPath: string;
+  elapsedMs: number;
+  speedFilesPerSec?: number;
+}
+
 export interface SavedRoute {
   id: string;
   path: string;

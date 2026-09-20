@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileSearch, FolderTree, Archive, HardDrive, Database, Lock, Unlock } from 'lucide-react';
+import { FileSearch, FolderTree, Archive, HardDrive, Database, Lock, Unlock, Cpu } from 'lucide-react';
 import { DatabaseStatus } from '../types';
 
 interface HeaderProps {
@@ -42,16 +42,23 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
                 {isSavedInStorage && (
                   <span
-                    title="La ruta local y sus archivos están guardados en LocalStorage y protegidos con contraseña"
+                    title="La ruta local y sus archivos están guardados en LocalStorage/IndexedDB y protegidos con contraseña"
                     className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200"
                   >
                     <HardDrive className="w-3 h-3 text-emerald-600" />
-                    <span>LocalStorage Guardado</span>
+                    <span>Persistencia Local Activa</span>
                   </span>
                 )}
+                <span
+                  title="Sistema preparado con procesamiento asíncrono para grandes volúmenes de información y miles de PDFs con barra de progreso"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-blue-50 text-blue-800 border border-blue-200"
+                >
+                  <Cpu className="w-3 h-3 text-blue-600" />
+                  <span>Grandes Volúmenes</span>
+                </span>
               </div>
               <p className="text-xs sm:text-sm text-slate-500">
-                Consulta archivos PDF por coincidencia de nombre en rutas y subdirectorios, con persistencia en LocalStorage y protección por contraseña.
+                Consulta y procesa grandes volúmenes de PDFs en rutas y subdirectorios con barra de progreso en tiempo real, porcentajes y persistencia protegida.
               </p>
             </div>
           </div>

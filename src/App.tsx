@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { SourceSelector } from './components/SourceSelector';
 import { SearchControls } from './components/SearchControls';
@@ -7,9 +7,15 @@ import { ResultsList } from './components/ResultsList';
 import { DirectoryExplorer } from './components/DirectoryExplorer';
 import { PdfPreviewModal } from './components/PdfPreviewModal';
 import { AddPdfModal } from './components/AddPdfModal';
-import { PdfItem, SearchFilter, DownloadProgress, SavedRoute, DatabaseStatus } from './types';
+import { ProcessingProgressModal } from './components/ProcessingProgressModal';
+import { PdfItem, SearchFilter, DownloadProgress, SavedRoute, DatabaseStatus, ProcessingProgress } from './types';
 import { getInitialRepositoryItems } from './utils/sampleData';
-import { filterPdfItems, traverseDataTransferItems } from './utils/folderScanner';
+import {
+  filterPdfItems,
+  traverseDataTransferItemsWithProgress,
+  parseLocalFolderFilesAsyncWithProgress,
+  generateHighVolumeDatasetWithProgress
+} from './utils/folderScanner';
 import { downloadPdfsAsZip } from './utils/zipDownloader';
 import { downloadSinglePdf, downloadSequentially } from './utils/fileDownloader';
 import {
@@ -21,7 +27,7 @@ import {
 } from './utils/databaseApi';
 import { RouteAuthModal } from './components/RouteAuthModal';
 import { getActiveAuthCode, clearActiveAuthCode } from './utils/auth';
-import { saveLocalRouteToStorage, getSavedLocalRouteFromStorage } from './utils/localStorageRoute';
+import { saveLocalRouteToStorage, saveLocalRouteAsync, loadLocalRouteAsync } from './utils/localStorageRoute';
 import { UploadCloud } from 'lucide-react';
 
 export default function App() {
@@ -30,6 +36,11 @@ export default function App() {
   const [localItems, setLocalItems] = useState<PdfItem[]>([]);
   const [currentSource, setCurrentSource] = useState<'repository' | 'local'>('repository');
   const [localFolderName, setLocalFolderName] = useState<string | null>(null);
+
+  // Large Volume Processing and Real-Time Progress State
+  const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
+  const [processingTargetRoute, setProcessingTargetRoute] = useState<string>('');
+  const isCancelledRef = useRef<boolean>(false);
 
   // Search Filter State
   const [filter, setFilter] = useState<SearchFilter>({
@@ -108,22 +119,25 @@ export default function App() {
     setIsRouteUnlocked(false);
   };
 
-  // Restore saved local route from LocalStorage on mount
+  // Restore saved local route from IndexedDB/LocalStorage on mount
   useEffect(() => {
-    try {
-      const savedLocal = getSavedLocalRouteFromStorage();
-      if (savedLocal && savedLocal.folderName) {
-        setLocalFolderName(savedLocal.folderName);
-        if (Array.isArray(savedLocal.items) && savedLocal.items.length > 0) {
-          setLocalItems(savedLocal.items as PdfItem[]);
+    async function restoreLocalRoute() {
+      try {
+        const savedLocal = await loadLocalRouteAsync();
+        if (savedLocal && savedLocal.folderName) {
+          setLocalFolderName(savedLocal.folderName);
+          if (Array.isArray(savedLocal.items) && savedLocal.items.length > 0) {
+            setLocalItems(savedLocal.items as PdfItem[]);
+          }
+          setCurrentSource('local');
+          setIsSavedInStorage(true);
+          setSavedStorageDate(savedLocal.savedAt);
         }
-        setCurrentSource('local');
-        setIsSavedInStorage(true);
-        setSavedStorageDate(savedLocal.savedAt);
+      } catch (err) {
+        console.error('Error al restaurar ruta desde almacenamiento local:', err);
       }
-    } catch (err) {
-      console.error('Error al restaurar ruta desde LocalStorage:', err);
     }
+    restoreLocalRoute();
   }, []);
 
   // Load saved routes and default path from server database on startup (for any PC that connects)
@@ -315,6 +329,196 @@ export default function App() {
     setSavedStorageDate(new Date().toISOString());
   };
 
+  // High-Volume Folder Processing with Progress and Percentages
+  const handleStartProcessFolderFiles = async (files: FileList | File[]) => {
+    if (!files || files.length === 0) return;
+    const firstFile = files[0];
+    const firstPath = ('webkitRelativePath' in firstFile && firstFile.webkitRelativePath) ? firstFile.webkitRelativePath : firstFile.name;
+    const rootName = firstPath.split('/')[0] || 'Carpeta seleccionada';
+
+    setProcessingTargetRoute(rootName);
+    isCancelledRef.current = false;
+
+    try {
+      const items = await parseLocalFolderFilesAsyncWithProgress(
+        files,
+        (progress) => setProcessingProgress(progress),
+        () => isCancelledRef.current
+      );
+
+      if (isCancelledRef.current) return;
+
+      // Persistence stage
+      setProcessingProgress((prev) =>
+        prev
+          ? {
+              ...prev,
+              stage: 'persisting',
+              stageLabel: `Guardando ${items.length.toLocaleString()} documentos en almacenamiento seguro...`,
+              percentage: 96
+            }
+          : null
+      );
+
+      await saveLocalRouteAsync(rootName, items, rootName);
+
+      setLocalItems(items);
+      setLocalFolderName(rootName);
+      setCurrentSource('local');
+      setIsSavedInStorage(true);
+      setSavedStorageDate(new Date().toISOString());
+
+      setProcessingProgress((prev) =>
+        prev
+          ? {
+              ...prev,
+              isProcessing: false,
+              stage: 'completed',
+              percentage: 100,
+              stageLabel: `¡Procesamiento exitoso! ${items.length.toLocaleString()} documentos PDF indexados y disponibles.`
+            }
+          : null
+      );
+    } catch (err) {
+      console.error('Error al procesar archivos de carpeta:', err);
+      setProcessingProgress(null);
+    }
+  };
+
+  // Process and Index Information in a Specific Given Route with Real-Time Progress and Percentage
+  const handleProcessRoute = async (routePath: string) => {
+    const target = routePath.trim();
+    const routeLabel = target || (currentSource === 'local' ? (localFolderName || 'Carpeta Local') : 'Repositorio Global');
+    setProcessingTargetRoute(routeLabel);
+    isCancelledRef.current = false;
+
+    const totalSourceItems = activeItems;
+    const startTime = Date.now();
+    const total = totalSourceItems.length;
+
+    setProcessingProgress({
+      isProcessing: true,
+      stage: 'scanning',
+      stageLabel: `Examinando y procesando información en ruta: "${routeLabel}"...`,
+      totalFiles: total,
+      processedFiles: 0,
+      pdfCount: 0,
+      percentage: 0,
+      currentPath: routeLabel,
+      elapsedMs: 0
+    });
+
+    const matching: PdfItem[] = [];
+    const BATCH = Math.max(10, Math.floor(total / 40));
+
+    for (let i = 0; i < total; i++) {
+      if (isCancelledRef.current) break;
+      const item = totalSourceItems[i];
+
+      const itemPath = item.path.toLowerCase();
+      const cleanTarget = target.toLowerCase().replace(/^\/+|\/+$/g, '');
+      const isUnderRoute = !cleanTarget || itemPath.includes(cleanTarget);
+
+      if (isUnderRoute) {
+        matching.push(item);
+      }
+
+      if (i % BATCH === 0 || i === total - 1) {
+        const processed = i + 1;
+        const pct = Math.min(100, Math.round((processed / total) * 100));
+        const elapsed = Date.now() - startTime;
+        const speed = elapsed > 100 ? Math.round((processed / elapsed) * 1000) : undefined;
+
+        setProcessingProgress({
+          isProcessing: true,
+          stage: 'indexing',
+          stageLabel: `Filtrando e indexando documentos (${processed.toLocaleString()} de ${total.toLocaleString()})...`,
+          totalFiles: total,
+          processedFiles: processed,
+          pdfCount: matching.length,
+          percentage: pct,
+          currentPath: item.path,
+          elapsedMs: elapsed,
+          speedFilesPerSec: speed
+        });
+
+        await new Promise((r) => setTimeout(r, 10));
+      }
+    }
+
+    // Apply route to filter
+    setFilter((prev) => ({ ...prev, pathPrefix: target }));
+
+    setProcessingProgress({
+      isProcessing: false,
+      stage: 'completed',
+      stageLabel: `¡Procesamiento de ruta completado! ${matching.length.toLocaleString()} documentos PDF encontrados en "${routeLabel}".`,
+      totalFiles: total,
+      processedFiles: total,
+      pdfCount: matching.length,
+      percentage: 100,
+      currentPath: `${routeLabel} (Indexada)`,
+      elapsedMs: Date.now() - startTime
+    });
+  };
+
+  // Simulate Large Volume with 3,500 PDFs with real-time percentage progress
+  const handleSimulateLargeVolume = async (targetCount = 3500) => {
+    const rootRoute = 'documentos/empresa_global';
+    setProcessingTargetRoute('documentos/empresa_global (Gran Volumen)');
+    isCancelledRef.current = false;
+
+    try {
+      const items = await generateHighVolumeDatasetWithProgress(
+        targetCount,
+        rootRoute,
+        (progress) => setProcessingProgress(progress),
+        () => isCancelledRef.current
+      );
+
+      if (isCancelledRef.current) return;
+
+      setProcessingProgress((prev) =>
+        prev
+          ? {
+              ...prev,
+              stage: 'persisting',
+              stageLabel: `Guardando ${items.length.toLocaleString()} documentos en almacenamiento seguro (IndexedDB)...`,
+              percentage: 97
+            }
+          : null
+      );
+
+      await saveLocalRouteAsync('documentos/empresa_global', items, 'Empresa Global');
+
+      setLocalItems(items);
+      setLocalFolderName('Empresa Global (3,500 PDFs)');
+      setCurrentSource('local');
+      setIsSavedInStorage(true);
+      setSavedStorageDate(new Date().toISOString());
+
+      setProcessingProgress((prev) =>
+        prev
+          ? {
+              ...prev,
+              isProcessing: false,
+              stage: 'completed',
+              percentage: 100,
+              stageLabel: `¡3,500 documentos procesados e indexados! Búsqueda ultrarrápida disponible.`
+            }
+          : null
+      );
+    } catch (err) {
+      console.error('Error al generar gran volumen:', err);
+      setProcessingProgress(null);
+    }
+  };
+
+  const handleCancelProcessing = () => {
+    isCancelledRef.current = true;
+    setProcessingProgress(null);
+  };
+
   // Download handlers
   const handleDownloadSingle = (item: PdfItem) => {
     downloadSinglePdf(item);
@@ -426,11 +630,20 @@ export default function App() {
     setIsDraggingOver(false);
 
     if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-      const items = await traverseDataTransferItems(e.dataTransfer.items);
-      if (items.length > 0) {
+      setProcessingTargetRoute('Carpeta Arrastrada');
+      isCancelledRef.current = false;
+      const items = await traverseDataTransferItemsWithProgress(
+        e.dataTransfer.items,
+        (progress) => setProcessingProgress(progress),
+        () => isCancelledRef.current
+      );
+      if (items.length > 0 && !isCancelledRef.current) {
         setLocalItems(items);
         setLocalFolderName('Carpeta Arrastrada');
         setCurrentSource('local');
+        await saveLocalRouteAsync('Carpeta Arrastrada', items, 'Carpeta Arrastrada');
+        setIsSavedInStorage(true);
+        setSavedStorageDate(new Date().toISOString());
       }
     }
   };
@@ -448,7 +661,7 @@ export default function App() {
           <UploadCloud className="w-16 h-16 animate-bounce mb-4" />
           <h2 className="text-2xl font-bold">Suelta tu carpeta o archivos PDF aquí</h2>
           <p className="text-sm text-red-100 max-w-md mt-1">
-            Se escanearán automáticamente todas las subcarpetas y archivos .PDF contenidos.
+            Se escanearán automáticamente todas las subcarpetas y archivos .PDF contenidos con barra de progreso.
           </p>
         </div>
       )}
@@ -468,11 +681,13 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
-        {/* Source Selector (Repository vs Local Folder) */}
+        {/* Source Selector (Repository vs Local Folder with High Volume Support) */}
         <SourceSelector
           currentSource={currentSource}
           onSelectSource={setCurrentSource}
           onLocalFilesLoaded={handleLocalFilesLoaded}
+          onStartProcessFiles={handleStartProcessFolderFiles}
+          onSimulateLargeVolume={handleSimulateLargeVolume}
           localFolderName={localFolderName}
           localPdfCount={localItems.length}
           onOpenAddModal={() => setIsAddModalOpen(true)}
@@ -482,11 +697,12 @@ export default function App() {
           savedStorageDate={savedStorageDate}
         />
 
-        {/* Search Query, Path & Mode Controls */}
+        {/* Search Query, Path & Mode Controls with Route Processing Button */}
         <SearchControls
           filter={filter}
           onFilterChange={handleFilterChange}
           onResetFilter={handleResetFilter}
+          onProcessRoute={handleProcessRoute}
           availableFolders={availableFolders}
           totalResults={filteredItems.length}
           isRouteUnlocked={isRouteUnlocked}
@@ -574,6 +790,14 @@ export default function App() {
         }}
         onSuccess={handleAuthSuccess}
         actionDescription={pendingAuthAction?.description}
+      />
+
+      {/* Large Volume Real-Time Processing Progress Modal with Percentages */}
+      <ProcessingProgressModal
+        progress={processingProgress}
+        targetRouteName={processingTargetRoute}
+        onCancel={handleCancelProcessing}
+        onClose={() => setProcessingProgress(null)}
       />
     </div>
   );

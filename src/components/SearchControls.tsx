@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, FolderGit2, X, SlidersHorizontal, ArrowDownAZ, Lock, Unlock } from 'lucide-react';
+import { Search, FolderGit2, X, SlidersHorizontal, ArrowDownAZ, Lock, Unlock, Cpu, Play } from 'lucide-react';
 import { SearchFilter, MatchMode } from '../types';
 
 interface SearchControlsProps {
@@ -11,6 +11,7 @@ interface SearchControlsProps {
   isRouteUnlocked: boolean;
   onRequestUnlockRoute: (actionDescription?: string) => void;
   onLockRoute: () => void;
+  onProcessRoute?: (routePath: string) => void;
 }
 
 export const SearchControls: React.FC<SearchControlsProps> = ({
@@ -21,7 +22,8 @@ export const SearchControls: React.FC<SearchControlsProps> = ({
   totalResults,
   isRouteUnlocked,
   onRequestUnlockRoute,
-  onLockRoute
+  onLockRoute,
+  onProcessRoute
 }) => {
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5">
@@ -128,6 +130,12 @@ export const SearchControls: React.FC<SearchControlsProps> = ({
                   onFilterChange({ pathPrefix: e.target.value });
                 }
               }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && onProcessRoute) {
+                  e.preventDefault();
+                  onProcessRoute(filter.pathPrefix || '');
+                }
+              }}
               placeholder={isRouteUnlocked ? 'Escribe o selecciona una ruta...' : 'Ruta protegida (clic para desbloquear con código)'}
               className={`w-full pl-9 pr-14 py-2 text-sm border rounded-lg focus:outline-none transition-all text-slate-900 ${
                 isRouteUnlocked
@@ -161,6 +169,24 @@ export const SearchControls: React.FC<SearchControlsProps> = ({
                   <option key={f} value={f} />
                 ))}
               </datalist>
+            )}
+          </div>
+
+          {/* Action to process the route with progress bar */}
+          <div className="flex items-center justify-between gap-2 pt-0.5">
+            <span className="text-[11px] text-slate-500 truncate">
+              Presiona Enter o haz clic en Procesar para consultar recursivamente esta ruta.
+            </span>
+            {onProcessRoute && (
+              <button
+                type="button"
+                onClick={() => onProcessRoute(filter.pathPrefix || '')}
+                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md bg-slate-900 hover:bg-slate-800 text-white shadow-xs transition-colors shrink-0"
+                title="Procesar e indexar la información contenida en esta ruta con barra de progreso y porcentaje"
+              >
+                <Cpu className="w-3.5 h-3.5 text-amber-400" />
+                <span>Procesar Ruta</span>
+              </button>
             )}
           </div>
         </div>

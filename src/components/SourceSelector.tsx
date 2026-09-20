@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { FolderOpen, Server, UploadCloud, PlusCircle, CheckCircle2, AlertCircle, Lock } from 'lucide-react';
+import { FolderOpen, Server, UploadCloud, PlusCircle, CheckCircle2, AlertCircle, Lock, Zap, Gauge } from 'lucide-react';
 import { parseLocalFolderFiles } from '../utils/folderScanner';
 import { PdfItem } from '../types';
 
@@ -7,6 +7,8 @@ interface SourceSelectorProps {
   currentSource: 'repository' | 'local';
   onSelectSource: (source: 'repository' | 'local') => void;
   onLocalFilesLoaded: (items: PdfItem[], rootFolderName: string) => void;
+  onStartProcessFiles?: (files: FileList | File[]) => void;
+  onSimulateLargeVolume?: (count?: number) => void;
   localFolderName: string | null;
   localPdfCount: number;
   onOpenAddModal: () => void;
@@ -20,6 +22,8 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
   currentSource,
   onSelectSource,
   onLocalFilesLoaded,
+  onStartProcessFiles,
+  onSimulateLargeVolume,
   localFolderName,
   localPdfCount,
   onOpenAddModal,
@@ -33,10 +37,14 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
   const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      const items = parseLocalFolderFiles(files);
-      const firstPath = files[0].webkitRelativePath || files[0].name;
-      const rootName = firstPath.split('/')[0] || 'Carpeta seleccionada';
-      onLocalFilesLoaded(items, rootName);
+      if (onStartProcessFiles) {
+        onStartProcessFiles(files);
+      } else {
+        const items = parseLocalFolderFiles(files);
+        const firstPath = files[0].webkitRelativePath || files[0].name;
+        const rootName = firstPath.split('/')[0] || 'Carpeta seleccionada';
+        onLocalFilesLoaded(items, rootName);
+      }
     }
   };
 
@@ -72,16 +80,30 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
           </p>
         </div>
 
-        {currentSource === 'repository' && (
-          <button
-            type="button"
-            onClick={onOpenAddModal}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors self-start sm:self-auto"
-          >
-            <PlusCircle className="w-3.5 h-3.5" />
-            <span>Agregar PDF o Carpeta</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {onSimulateLargeVolume && (
+            <button
+              type="button"
+              onClick={() => onSimulateLargeVolume(3500)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors shadow-2xs"
+              title="Procesar e indexar un lote de 3,500 PDFs corporativos para probar el sistema de progreso en grandes volúmenes"
+            >
+              <Zap className="w-3.5 h-3.5 text-blue-600" />
+              <span>Probar Gran Volumen (3,500 PDFs)</span>
+            </button>
+          )}
+
+          {currentSource === 'repository' && (
+            <button
+              type="button"
+              onClick={onOpenAddModal}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors self-start sm:self-auto"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>Agregar PDF o Carpeta</span>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
